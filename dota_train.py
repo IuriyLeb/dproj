@@ -1,44 +1,23 @@
 import pandas as pd
-from bs4 import BeautifulSoup
 from datetime import datetime as dt, timedelta as td
-import requests
-# TODO relocate dotabuff parser to another file
-
-dota_stats = pd.read_csv('./dota_hero_stats.csv', index_col=0)
-
-bad_dict, good_dict = {}, {}
-sum_len = dota_stats.shape[0]
-for hero_name in dota_stats.localized_name:
-    bad_against, good_against = [], []
-    alt_hero_name = hero_name.lower().replace(' ', '-')
-    alt_hero_name = alt_hero_name.replace("'", '')
-    dotabuff_request = requests.get('https://www.dotabuff.com/heroes/{}/counters'.format(alt_hero_name),
-                                    headers={'User-agent': 'test'})
-    if dotabuff_request.status_code != 200:
-        continue
-    html_text = BeautifulSoup(dotabuff_request.text, "lxml")
-    counter_table = html_text.find_all('section', {'class': 'counter-outline'})
-    counter_table = str(counter_table).split('"')
-    for i in counter_table:
-        if i[0].isupper() and len(i) < 20:
-            if i not in bad_against and len(bad_against) < 5:
-                bad_against.append(i)
-            elif i not in good_against and i not in bad_against:
-                good_against.append(i)
-    bad_dict[hero_name] = bad_against
-    good_dict[hero_name] = good_against
-print('Done')
+from dotabuff_update import update_database_from_dotabuff
 
 
-dota_stats['bad_against'] = None
-dota_stats['good_against'] = None
+with open('./update_time.txt', 'r') as file:
+    for line in file:
+        importing_date = line.strip()
+date_to_update = dt.strptime(importing_date, '%Y, %m, %d -- %H:%M')
+date_now = dt.today()
+if date_now >= date_to_update:
+    print('Updating...')
+    dota_stats = update_database_from_dotabuff()
+    date_to_update = date_now + td(days=10)
+    print(dt.strftime(date_to_update, 'Next update at %d.%m.%Y'))
+    with open('./update_time.txt', 'w') as file:
+        file.write(dt.strftime(date_to_update, '%Y, %m, %d -- %H:%M'))
+else:
+    dota_stats = pd.read_csv('./stats_dotabuff.csv', index_col=0)
 
-for hero in bad_dict:
-    ind = dota_stats[dota_stats['localized_name'] == hero].index[0]
-    dota_stats.at[ind, 'bad_against'] = bad_dict[hero]
-    dota_stats.at[ind, 'good_against'] = good_dict[hero]
-
-dota_stats.to_csv('./stats_dotabuff.csv')
 hero = input('Choose a hero:')
 ind = dota_stats[dota_stats['localized_name'] == hero].index[0]
 good_against = '\n\t'.join(dota_stats.at[ind, 'good_against'])
@@ -47,7 +26,6 @@ print('Good against:\n\t{}\nBad against:\n\t{}'.format(good_against, bad_against
 # TODO add functions
 # TODO classes?
 # TODO pick-helper
-
 # TODO heroes pick priority
 # TODO try block in team choosing
 my_team = []
@@ -69,17 +47,3 @@ while True:
             suggest_pick[enemy] += 1
     print(suggest_pick)
 print(suggest_pick)
-
-with open('./update_time.txt', 'dotabuff_request') as file:
-    for line in file:
-        importing_date = line.strip()
-date_to_update = dt.strptime(importing_date,'%Y, %m, %d -- %H:%M')
-
-date_now = dt.today()
-
-if date_now >= date_to_update:
-    print('Updating...')  # TODO run update method here
-    date_to_update = date_now + td(days=10)
-    print(dt.strftime(date_to_update, 'Next update at %d.%m.%Y'))
-    with open('./update_time.txt', 'w') as file:
-        file.write(dt.strftime(date_to_update,'%Y, %m, %d -- %H:%M'))
